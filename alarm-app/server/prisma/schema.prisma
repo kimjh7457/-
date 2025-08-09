@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String   @id @default(cuid())
+  email                   String   @unique
+  phone                   String   @unique
+  passwordHash            String
+  displayName             String
+  successfulDismissCount  Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  groups      GroupMember[]
+  ownedGroups Group[]      @relation("GroupOwner")
+  alarmParticipants AlarmParticipant[]
+  cycleParticipants AlarmCycleParticipant[]
+}
+
+model Group {
+  id          String        @id @default(cuid())
+  name        String
+  ownerId     String
+  owner       User          @relation("GroupOwner", fields: [ownerId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  members     GroupMember[]
+  alarms      Alarm[]
+}
+
+enum GroupMemberStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum GroupMemberRole {
+  MEMBER
+  ADMIN
+}
+
+model GroupMember {
+  id        String             @id @default(cuid())
+  groupId   String
+  userId    String
+  status    GroupMemberStatus  @default(PENDING)
+  role      GroupMemberRole    @default(MEMBER)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  group     Group  @relation(fields: [groupId], references: [id])
+  user      User   @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, userId])
+}
+
+enum AlarmStatus {
+  SCHEDULED
+  TRIGGERED
+  COMPLETED
+  CANCELLED
+}
+
+model Alarm {
+  id            String      @id @default(cuid())
+  groupId       String
+  title         String
+  message       String
+  scheduledAt   DateTime
+  status        AlarmStatus @default(SCHEDULED)
+  reAlarmIntervalMinutes Int @default(10)
+  lastTriggeredAt DateTime?
+  nextTriggerAt  DateTime?
+  currentCycleNumber Int @default(0)
+  completedAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  group         Group       @relation(fields: [groupId], references: [id])
+  participants  AlarmParticipant[]
+  cycles        AlarmCycle[]
+}
+
+model AlarmParticipant {
+  id       String @id @default(cuid())
+  alarmId  String
+  userId   String
+
+  alarm    Alarm  @relation(fields: [alarmId], references: [id])
+  user     User   @relation(fields: [userId], references: [id])
+
+  @@unique([alarmId, userId])
+}
+
+model AlarmCycle {
+  id         String   @id @default(cuid())
+  alarmId    String
+  cycleNumber Int
+  triggeredAt DateTime @default(now())
+
+  alarm      Alarm    @relation(fields: [alarmId], references: [id])
+  participants AlarmCycleParticipant[]
+
+  @@unique([alarmId, cycleNumber])
+}
+
+model AlarmCycleParticipant {
+  id             String   @id @default(cuid())
+  alarmCycleId   String
+  userId         String
+  dismissedAt    DateTime?
+
+  alarmCycle     AlarmCycle @relation(fields: [alarmCycleId], references: [id])
+  user           User       @relation(fields: [userId], references: [id])
+
+  @@unique([alarmCycleId, userId])
+}
